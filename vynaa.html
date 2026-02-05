@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iNotes Dark Ultra</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ios: {
+                            bg: '#000000',
+                            sidebar: '#1C1C1E',
+                            card: '#2C2C2E',
+                            blue: '#0A84FF',
+                            red: '#FF453A',
+                            orange: '#FF9F0A',
+                            gray: '#98989D',
+                            separator: '#38383A',
+                            text: '#FFFFFF'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'San Francisco', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        
+        .glass {
+            background: rgba(18, 18, 18, 0.8);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .active-card {
+            background-color: #2C2C2E !important;
+            border-color: rgba(10, 132, 255, 0.5) !important;
+            transform: scale(1.02);
+        }
+
+        /* Logic Responsive */
+        @media (max-width: 768px) {
+            .editor-panel { display: none; }
+            .mobile-active .editor-panel { display: flex; position: fixed; inset: 0; z-index: 50; }
+            .mobile-active .sidebar-panel { display: none; }
+        }
+
+        .note-content-area {
+            scrollbar-gutter: stable;
+        }
+
+        *:focus { outline: none; }
+    </style>
+</head>
+<body class="bg-ios-bg text-ios-text font-sans h-screen overflow-hidden selection:bg-ios-blue selection:text-white transition-colors duration-500">
+
+    <div id="app" class="flex h-full max-w-7xl mx-auto bg-ios-bg md:border-x md:border-ios-separator overflow-hidden relative shadow-2xl">
+
+        <!-- SIDEBAR -->
+        <aside id="sidebarPanel" class="sidebar-panel w-full md:w-80 flex-col border-r border-ios-separator bg-ios-bg h-full z-10 flex">
+            <!-- Header Sidebar -->
+            <div class="glass h-16 px-5 flex items-center justify-between shrink-0 z-20">
+                <h1 class="text-2xl font-extrabold tracking-tight">Catatan</h1>
+                <div class="flex gap-1">
+                    <button onclick="createNewNote()" class="text-ios-blue hover:bg-ios-blue/10 rounded-full p-2 transition">
+                        <i class="ph ph-note-pencil text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kategori / Tabs -->
+            <div class="flex px-4 py-2 gap-2 overflow-x-auto no-scrollbar border-b border-ios-separator/20 bg-black">
+                <button onclick="setFilter('all')" id="tab-all" class="text-xs font-semibold px-3 py-1.5 rounded-full bg-ios-blue text-white whitespace-nowrap">Semua</button>
+                <button onclick="setFilter('pinned')" id="tab-pinned" class="text-xs font-semibold px-3 py-1.5 rounded-full bg-ios-card text-ios-gray whitespace-nowrap">Disematkan</button>
+                <button onclick="setFilter('recent')" id="tab-recent" class="text-xs font-semibold px-3 py-1.5 rounded-full bg-ios-card text-ios-gray whitespace-nowrap">Baru</button>
+            </div>
+
+            <!-- Search -->
+            <div class="px-4 py-3 bg-black">
+                <div class="relative group">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-ios-gray group-focus-within:text-ios-blue transition-colors"></i>
+                    <input type="text" id="searchInput" placeholder="Cari di iNotes..." 
+                        class="w-full bg-[#1C1C1E] text-white rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-1 focus:ring-ios-blue transition-all placeholder-ios-gray/50"
+                        oninput="renderNotesList()">
+                </div>
+            </div>
+
+            <!-- List Note Container -->
+            <div class="flex-1 overflow-y-auto relative">
+                <div id="noteList" class="px-4 pb-10 space-y-2 pt-2">
+                    <!-- Injected by JS -->
+                </div>
+                <!-- Empty State Sidebar -->
+                <div id="emptyListState" class="hidden absolute inset-0 flex-col items-center justify-center text-ios-gray/40 pointer-events-none">
+                    <i class="ph ph-ghost text-5xl mb-2"></i>
+                    <p class="text-sm">Kosong</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- EDITOR -->
+        <main id="editorPanel" class="editor-panel flex-1 flex-col bg-black h-full relative">
+            
+            <!-- Empty Overlay -->
+            <div id="noSelectionOverlay" class="absolute inset-0 flex flex-col items-center justify-center text-ios-gray/30 z-0">
+                <i class="ph ph-scribble-loop text-8xl mb-4 animate-pulse"></i>
+                <p class="text-xl font-light">Mulai Sesuatu yang Baru</p>
+            </div>
+
+            <!-- Editor Content -->
+            <div id="editorContent" class="flex-col h-full w-full z-10 hidden bg-black animate-in fade-in duration-300">
+                <!-- Toolbar -->
+                <div class="glass h-16 px-4 flex items-center justify-between shrink-0">
+                    <div class="flex items-center gap-3">
+                        <button onclick="closeEditor()" class="md:hidden flex items-center text-ios-blue font-semibold hover:opacity-70">
+                            <i class="ph ph-caret-left-bold"></i>
+                        </button>
+                        <div class="flex flex-col">
+                            <span id="saveStatus" class="text-[10px] uppercase tracking-widest text-ios-blue font-bold">Autosave Aktif</span>
+                            <span id="lastEdited" class="text-[11px] text-ios-gray font-medium">--</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-1 sm:gap-2">
+                        <button onclick="togglePinCurrent()" id="pinBtn" title="Sematkan" class="text-ios-gray hover:bg-white/10 p-2 rounded-lg transition">
+                            <i class="ph ph-push-pin text-xl"></i>
+                        </button>
+                        <button onclick="copyToClipboard()" title="Salin" class="text-ios-blue hover:bg-ios-blue/10 p-2 rounded-lg transition">
+                            <i class="ph ph-copy text-xl"></i>
+                        </button>
+                        <button onclick="downloadNote()" title="Download" class="text-ios-blue hover:bg-ios-blue/10 p-2 rounded-lg transition">
+                            <i class="ph ph-download-simple text-xl"></i>
+                        </button>
+                        <button onclick="openConfirmModal()" title="Hapus" class="text-ios-red hover:bg-ios-red/10 p-2 rounded-lg transition">
+                            <i class="ph ph-trash text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="flex-1 overflow-y-auto px-6 py-8 note-content-area">
+                    <input type="text" id="noteTitle" placeholder="Judul Catatan" 
+                        class="w-full text-4xl font-black mb-6 placeholder-zinc-800 bg-transparent border-none p-0 focus:ring-0 text-white tracking-tight"
+                        oninput="handleInput()">
+                    
+                    <textarea id="noteBody" placeholder="Apa yang ada dipikiranmu?" 
+                        class="w-full h-full resize-none text-xl leading-relaxed placeholder-zinc-900 bg-transparent border-none p-0 focus:ring-0 text-gray-300 font-light"
+                        oninput="handleInput()"></textarea>
+                </div>
+
+                <!-- Bottom Status -->
+                <div class="px-6 py-3 border-t border-ios-separator/20 bg-black flex justify-between items-center text-[11px] text-ios-gray font-mono">
+                    <span id="wordCount">0 KATA</span>
+                    <span id="charCount">0 KARAKTER</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL HAPUS -->
+    <div id="modalConfirm" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-md opacity-0 transition-opacity duration-300">
+        <div class="bg-[#2C2C2E] w-[300px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 transform scale-90 transition-transform duration-300" id="modalBox">
+            <div class="p-8 text-center">
+                <div class="w-16 h-16 bg-ios-red/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="ph ph-warning-octagon text-ios-red text-3xl"></i>
+                </div>
+                <h3 class="text-white font-bold text-xl mb-2">Hapus?</h3>
+                <p class="text-ios-gray text-sm">Catatan ini akan hilang selamanya dari memori.</p>
+            </div>
+            <div class="flex border-t border-white/5">
+                <button onclick="closeConfirmModal()" class="flex-1 py-4 text-ios-blue font-semibold hover:bg-white/5 transition border-r border-white/5">Batal</button>
+                <button onclick="executeDelete()" class="flex-1 py-4 text-ios-red font-bold hover:bg-ios-red/5 transition">Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 z-[200] bg-ios-blue text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm tracking-wide opacity-0 -translate-y-10 transition-all duration-500 flex items-center gap-3">
+        <i class="ph ph-lightning-fill"></i>
+        <span id="toastText">Berhasil!</span>
+    </div>
+
+    <script>
+        // --- State ---
+        let notes = JSON.parse(localStorage.getItem('inotes_ultra_v3')) || [];
+        let activeNoteId = null;
+        let currentFilter = 'all';
+
+        // --- Core ---
+        function init() {
+            renderNotesList();
+        }
+
+        function save() {
+            localStorage.setItem('inotes_ultra_v3', JSON.stringify(notes));
+            renderNotesList();
+        }
+
+        function createNewNote() {
+            const newNote = {
+                id: 'note_' + Date.now(),
+                title: '',
+                body: '',
+                pinned: false,
+                updatedAt: new Date().toISOString()
+            };
+            notes.unshift(newNote);
+            save();
+            selectNote(newNote.id);
+        }
+
+        function selectNote(id) {
+            activeNoteId = id;
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+
+            document.getElementById('noteTitle').value = note.title;
+            document.getElementById('noteBody').value = note.body;
+            
+            updateMetadata(note);
+            
+            // UI Toggle
+            document.getElementById('noSelectionOverlay').style.display = 'none';
+            const editor = document.getElementById('editorContent');
+            editor.classList.remove('hidden');
+            editor.classList.add('flex');
+            
+            // Pin Status UI
+            updatePinIcon(note.pinned);
+
+            // Responsive
+            document.body.classList.add('mobile-active');
+            
+            renderNotesList(); // Refresh active state
+        }
+
+        function handleInput() {
+            if (!activeNoteId) return;
+            const noteIndex = notes.findIndex(n => n.id === activeNoteId);
+            if (noteIndex === -1) return;
+            
+            const updated = {
+                ...notes[noteIndex],
+                title: document.getElementById('noteTitle').value,
+                body: document.getElementById('noteBody').value,
+                updatedAt: new Date().toISOString()
+            };
+
+            notes.splice(noteIndex, 1);
+            notes.unshift(updated);
+            
+            updateMetadata(updated);
+            
+            // Auto save
+            localStorage.setItem('inotes_ultra_v3', JSON.stringify(notes));
+            
+            // Debounce list re-render for performance
+            clearTimeout(window.renderTimer);
+            window.renderTimer = setTimeout(renderNotesList, 800);
+        }
+
+        function updateMetadata(note) {
+            const date = new Date(note.updatedAt);
+            document.getElementById('lastEdited').textContent = date.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            
+            const text = (note.title + " " + note.body).trim();
+            const words = text ? text.split(/\s+/).length : 0;
+            const chars = (note.title + note.body).length;
+            
+            document.getElementById('wordCount').textContent = `${words} KATA`;
+            document.getElementById('charCount').textContent = `${chars} KARAKTER`;
+        }
+
+        // --- Fitur Tambahan ---
+        
+        function setFilter(f) {
+            currentFilter = f;
+            ['all', 'pinned', 'recent'].forEach(id => {
+                const btn = document.getElementById('tab-' + id);
+                if (btn) {
+                    btn.className = (id === f) 
+                        ? "text-xs font-semibold px-3 py-1.5 rounded-full bg-ios-blue text-white whitespace-nowrap transition"
+                        : "text-xs font-semibold px-3 py-1.5 rounded-full bg-ios-card text-ios-gray whitespace-nowrap transition";
+                }
+            });
+            renderNotesList();
+        }
+
+        function togglePinCurrent() {
+            const note = notes.find(n => n.id === activeNoteId);
+            if (!note) return;
+            note.pinned = !note.pinned;
+            updatePinIcon(note.pinned);
+            
+            // Sort pinned to top
+            notes.sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updatedAt) - new Date(a.updatedAt)));
+            
+            save();
+            showToast(note.pinned ? "Disematkan ke Atas" : "Pin dilepas");
+        }
+
+        function updatePinIcon(isPinned) {
+            const btn = document.getElementById('pinBtn');
+            if (btn) {
+                btn.className = isPinned 
+                    ? "text-ios-orange bg-ios-orange/10 p-2 rounded-lg transition"
+                    : "text-ios-gray hover:bg-white/10 p-2 rounded-lg transition";
+            }
+        }
+
+        function copyToClipboard() {
+            const title = document.getElementById('noteTitle').value;
+            const body = document.getElementById('noteBody').value;
+            const content = (title ? title + '\n\n' : '') + body;
+            
+            navigator.clipboard.writeText(content).then(() => {
+                showToast("Tersalin ke Clipboard!");
+            }).catch(() => {
+                // Fallback jika clipboard API tidak tersedia di lingkungan tertentu
+                const el = document.createElement('textarea');
+                el.value = content;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                showToast("Tersalin ke Clipboard!");
+            });
+        }
+
+        function downloadNote() {
+            const title = document.getElementById('noteTitle').value || 'Catatan';
+            const body = document.getElementById('noteBody').value;
+            const blob = new Blob([`${title}\n\n${body}`], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${title}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("File Berhasil Diunduh");
+        }
+
+        // --- Modal & UI ---
+
+        function openConfirmModal() {
+            const m = document.getElementById('modalConfirm');
+            const b = document.getElementById('modalBox');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+            setTimeout(() => { m.classList.add('opacity-100'); b.classList.add('scale-100'); }, 10);
+        }
+
+        function closeConfirmModal() {
+            const m = document.getElementById('modalConfirm');
+            const b = document.getElementById('modalBox');
+            m.classList.remove('opacity-100');
+            b.classList.remove('scale-100');
+            setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); }, 300);
+        }
+
+        function executeDelete() {
+            notes = notes.filter(n => n.id !== activeNoteId);
+            save();
+            closeConfirmModal();
+            closeEditor();
+            showToast("Catatan telah dihapus");
+        }
+
+        function closeEditor() {
+            document.body.classList.remove('mobile-active');
+            activeNoteId = null;
+            document.getElementById('editorContent').classList.add('hidden');
+            document.getElementById('noSelectionOverlay').style.display = 'flex';
+            renderNotesList();
+        }
+
+        function showToast(text) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastText').textContent = text;
+            t.classList.remove('opacity-0', '-translate-y-10');
+            setTimeout(() => t.classList.add('opacity-0', '-translate-y-10'), 3000);
+        }
+
+        function renderNotesList() {
+            const searchInput = document.getElementById('searchInput');
+            const search = searchInput ? searchInput.value.toLowerCase() : "";
+            const list = document.getElementById('noteList');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            let filtered = notes.filter(n => 
+                (n.title && n.title.toLowerCase().includes(search)) || 
+                (n.body && n.body.toLowerCase().includes(search))
+            );
+
+            // Apply Tab Filter
+            if (currentFilter === 'pinned') filtered = filtered.filter(n => n.pinned);
+            if (currentFilter === 'recent') filtered = filtered.slice(0, 5);
+
+            if (filtered.length === 0) {
+                toggleEmptyList(true);
+                return;
+            }
+            toggleEmptyList(false);
+
+            filtered.forEach(note => {
+                const isActive = note.id === activeNoteId;
+                const div = document.createElement('div');
+                div.className = `p-4 rounded-2xl cursor-pointer transition-all duration-300 border border-transparent mb-1 group relative overflow-hidden ${isActive ? 'active-card' : 'hover:bg-[#1C1C1E]'}`;
+                div.onclick = () => selectNote(note.id);
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-bold text-sm truncate ${isActive ? 'text-ios-blue' : 'text-white'}">${escapeHtml(note.title) || 'Tanpa Judul'}</h3>
+                            <p class="text-xs text-ios-gray truncate mt-1">${escapeHtml(note.body.substring(0, 50)) || 'Belum ada isi...'}</p>
+                        </div>
+                        ${note.pinned ? '<i class="ph ph-push-pin-fill text-ios-orange text-xs ml-2"></i>' : ''}
+                    </div>
+                    <div class="text-[10px] text-ios-gray/50 mt-2 font-mono">${new Date(note.updatedAt).toLocaleDateString('id-ID')}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function toggleEmptyList(show) {
+            const list = document.getElementById('noteList');
+            const empty = document.getElementById('emptyListState');
+            if (list) list.style.display = show ? 'none' : 'block';
+            if (empty) {
+                empty.classList.toggle('hidden', !show);
+                empty.classList.toggle('flex', show);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
